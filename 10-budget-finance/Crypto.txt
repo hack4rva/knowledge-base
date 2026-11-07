@@ -1,0 +1,250 @@
+A Research Proposal for a Low-Overhead Public Transparency Ledger: The "Proof-of-Expenditure" Model
+1.0 Executive Overview: The Proof-of-Expenditure Architecture
+1.1 Validating the Vision: From Crypto Spending to Cryptographic Proof
+The objective of this proposal is to architect a low-overhead, high-transparency financial ledger for a non-profit organization. The user's request to "use crypto somehow" to log and display expenditures from a real bank account is a sophisticated one. The optimal solution, which will be detailed herein, does not involve spending funds using cryptocurrency. Instead, it leverages the core technology of public blockchains as a cryptographic notarization service.
+This "Proof-of-Expenditure" model addresses the non-profit's core need: to prove to the public that the expenditures it reports are identical to the transactions that actually occurred in its bank account. This is achieved by creating an immutable, publicly verifiable timestamp for each transaction. By anchoring a unique "digital fingerprint" of each transaction to a public blockchain, the non-profit can mathematically demonstrate that its financial records have not been altered or tampered with after the fact. This model is designed to enhance donor trust and provide radical transparency, a key value for non-profit organizations.
+1.2 The 4-Component SaaS Architecture (The Plug-in Stack)
+This proposal is founded on a 4-component "plug-in" stack, composed almost entirely of Software-as-a-Service (SaaS) tools. This design directly fulfills the requirement for a low-overhead solution that minimizes custom development and server maintenance.
+ * Component 1: Ingest (Data Sourcing): An Open Banking API (Application Programming Interface) will be used to securely connect to the non-profit's bank account and automatically fetch transaction data. Key candidates for this component include Plaid and Quiltt.
+ * Component 2: Process (Automation Middleware): A low-code or no-code "glue" service will act as the system's central nervous system. This service will listen for new transaction events, retrieve the data, perform necessary transformations (i.e., hashing), and trigger the anchoring component. Key candidates include Pipedream and Make.com.
+ * Component 3: Anchor (Immutable Notarization): A Blockchain-as-a-Service (BaaS) or Timestamping-as-a-Service (TaaS) API will be used to write a hash (a cryptographic fingerprint) of the transaction data to a public, low-cost blockchain.
+ * Component 4: Display (Public Verification): The non-profit's existing React application  will be enhanced with simple libraries to read the anchored data from the blockchain and present a "verification" status to the public.
+1.3 High-Level Data Flow Diagram
+The proposed system will operate via the following automated workflow:
+ * A new transaction (e.g., an expenditure) is posted to the non-profit's bank account.
+ * [Component 1: Plaid] detects this new transaction. Plaid's system then fires a SYNC_UPDATES_AVAILABLE webhook event.
+ * [Component 2: Pipedream] is configured to listen for this specific webhook. Upon receiving the signal, the Pipedream workflow executes:
+   * It first calls Plaid's /transactions/sync endpoint to retrieve the new transaction data (e.g., {'vendor': 'Office Depot', 'amount': 120.45}).
+   * It then calculates a unique SHA-256 hash of this data.
+ * [Component 2: Pipedream] then performs two actions simultaneously:
+   * It writes the full, human-readable transaction data (vendor, amount, date) plus the new hash to a private database that the non-profit controls (e.g., a database supporting its React app).
+   * It makes an API call to **** , instructing it to write only the hash to the Polygon blockchain.
+ * **** (the public dashboard)  fetches the categorized list of expenditures from the non-profit's private database to display them.
+ * For each expenditure line item, the React app displays a "Verify" button. When clicked, the app uses the PolygonScan API  or Ethers.js library  to fetch the transaction from the Polygon blockchain, re-calculates the hash of the data on the-fly, and compares the two. If they match, it displays a "Verified on-chain ✔" icon.
+This architecture achieves the user's goal of "logging to Ledger" while separating sensitive financial data (kept private) from the cryptographic proof (made public).
+2.0 Component 1: The Ingestion Engine (Sourcing Bank Transaction Data)
+2.1 Analysis of Open Banking (FinTech) SaaS Providers
+This component is the required "real account" integration. It necessitates an Open Banking API aggregator to securely link to the non-profit's bank and retrieve transaction data. This connection is read-only and provides the raw data for the public ledger. The primary candidates for this are Plaid, Quiltt.io, Teller.io, and MX.
+2.2 Primary Candidate: Plaid
+Plaid is the market leader in North American bank data aggregation.
+ * Product: The appropriate product is Plaid Transactions. This API provides up to 24 months of cleaned, categorized spending data from checking, savings, and credit card accounts.
+ * Mechanism: A modern Plaid integration does not rely on manual, periodic polling. Instead, it uses a webhook-driven system. The non-profit will use Plaid's /link/token/create endpoint to specify a webhook URL (which will point to the Component 2 middleware) and include transactions in the products array.
+   * When Plaid detects new data, it sends a SYNC_UPDATES_AVAILABLE webhook.
+   * The middleware service then calls the /transactions/sync endpoint. This endpoint uses a cursor value to return only the new, updated, or removed transactions since the last sync, making it highly efficient.
+ * Pricing (The Core Challenge): Plaid's pricing is notoriously opaque and a common concern for developers. Plaid offers three main tiers: "Pay as you go" (PAYG), "Growth," and "Custom".
+   * The "Pay as you go" plan is marketed as "Best for individuals and developers" and, critically, has "no minimum spend or commitment". This is the ideal plan for the non-profit.
+   * Contradictory Data: There is a significant discrepancy in public reports regarding Plaid's pricing. Some developers report being quoted steep platform fees of $500-$1,000 per month and 12-month commitments. Conversely, other reports indicate a simple PAYG price for the Transactions product is approximately $0.30 per linked account per month.
+ * The Non-Profit Social Impact Strategy: The discrepancy between the $0.30/mo and $1,000/mo price points likely stems from developers being upsold from the true PAYG plan to the "Growth" or "Custom" plan, which do have minimums.
+   * However, Plaid has a public-facing mission to "unlock financial freedom for everyone"  and actively promotes its work with non-profits and social impact organizations.
+   * Case Study: Scholar Fund: Plaid published a case study on Scholar Fund, a non-profit that used Plaid (specifically Identity Verification) to securely distribute a $5 million relief fund to over 6,000 families.
+   * Case Study: Positive Finance: Plaid is also used by Positive Finance, an impact investing B Corp, to connect employee bank accounts to facilitate donations to non-profits.
+   * Case Study: Give Lively: The non-profit platform Give Lively also partners with Plaid to offer low-cost, secure ACH donations, which are processed by Stripe at a non-profit-friendly rate of 0.8% capped at $5.
+   * Actionable Recommendation: The non-profit should not simply sign up for the PAYG plan online. Instead, it should contact Plaid Sales , explicitly state its non-profit status, and reference the Scholar Fund  and Positive Finance  case studies. This provides significant leverage to request access to a true PAYG plan (like the $0.30/mo model ) or a special "social impact" plan, bypassing the high-cost enterprise platform fees.
+2.3 High-Value Alternative: Quiltt.io
+ * Product: Quiltt.io is an "aggregator of aggregators". It provides a single, unified API that can route requests across multiple underlying data providers, including Plaid, MX, and Finicity.
+ * Value Proposition: This model simplifies development  and is marketed toward startups and builders. Its primary advantage over Plaid is pricing transparency and avoiding "vendor lock-in".
+ * Pricing: While some anecdotal developer feedback on Reddit is negative , most sources praise Quiltt.io for its transparent, "wholesale rates"  that are "25–30% off aggregator rack rates". Critically, Quiltt.io offers a "Builder package" (a relatively new plan) specifically for small-scale usage, which has been cited at $99 per month. While $99/mo is significantly more than Plaid's potential $0.30/mo, it is predictable and avoids the risk of Plaid's opaque sales process resulting in a $1,000/mo "Growth" plan.
+ * Note: Research for "Quiltt" surfaces two different companies. Quiltt.com is a platform for senior living communities. The correct service for this proposal is Quiltt.io, the FinTech API aggregator.
+2.4 Other Alternatives (Teller.io & MX)
+ * Teller.io: This is a strong, simple alternative. It is developer-focused  and its pricing is completely transparent: $0.30 per enrollment, per month. This matches Plaid's rumored PAYG price. It presents itself as a more reliable, real-time API. The primary drawbacks are that it is US-only  and, as a smaller company, may have less comprehensive bank coverage than Plaid.
+ * MX: This provider is clearly geared toward enterprise clients. Its pricing is opaque  and average annual contract values are estimated to be around $15,000. This is not a viable option for the non-profit's "small fee" requirement.
+2.5 Table 1: Bank Aggregation API: Feature & Cost Comparison
+| Provider | Target Use Case | Relevant Product | Pricing Model | Estimated Cost for 1 Account | Key Differentiator |
+|---|---|---|---|---|---|
+| Plaid | Developer / Enterprise | Transactions  | Opaque PAYG / Growth  | $0.30/mo (unverified ) or $500+/mo (reported ) | Market leader; non-profit case studies. |
+| Quiltt.io | Startup / Developer | Aggregation API  | Transparent Tiered  | $99/mo (Builder Plan ) | Aggregator of aggregators (Plaid, MX, etc.). |
+| Teller.io | Developer | Transactions API | Transparent PAYG  | $0.30/mo  | Simple, developer-first API. US-only. |
+| MX | Enterprise | Aggregation  | Enterprise Custom  | ~$1,250/mo (avg. $15k/yr ) | Strong data enhancement features. |
+2.6 Recommendation for Component 1
+ * Path 1 (Lowest Cost): Pursue Plaid. The non-profit should initiate contact with Plaid Sales and leverage its non-profit status, citing the Scholar Fund  and Positive Finance  case studies to secure a true "Pay as you go" plan without high minimums.
+ * Path 2 (Predictable Cost): If Plaid's sales process is difficult or results in a high-cost proposal, the non-profit should pivot to Quiltt.io. The $99/mo "Builder" plan provides budget certainty and a high-quality, multi-provider backend.
+3.0 Component 2: The Automation Middleware (The No-Code Plugin)
+3.1 Bridging Bank Data to the Blockchain Without a Server
+This component is the "plug-in" core of the entire architecture. It is an automation platform  that acts as the "glue" between Component 1 (Bank API) and Component 3 (Blockchain API). Its function is to:
+ * Provide a webhook URL to receive the SYNC_UPDATES_AVAILABLE signal from Plaid.
+ * Upon triggering, execute a workflow:
+   * Call Plaid's /transactions/sync endpoint.
+   * Perform a "Code" step to format the transaction data and generate its SHA-256 hash.
+   * Make an API call to the Component 3 service to anchor the hash.
+   * Make an API call to the non-profit's private database to log the expenditure.
+This serverless architecture completely removes the need for the non-profit to host, secure, or maintain its own backend server, fulfilling the "low overhead" requirement.
+3.2 Evaluating Workflow Automation Platforms
+ * Zapier: Zapier is the most widely-known automation platform. It has a Plaid integration  and can perform custom API requests.
+   * Pricing (The Blocker): Zapier's pricing model is prohibitive for this use case. The required workflow is a "multi-step Zap"  and involves "premium apps" (like Webhooks or API Requests). Zapier's Free plan does not support this; it is limited to 2-step Zaps. Therefore, the non-profit would be forced onto the "Professional" plan, which starts at $19.99/mo (billed annually) or $29.99/mo (billed monthly).
+   * Technical Hurdle: A developer report on Reddit explicitly notes that Plaid's OAuth authentication flow "doesn't play nicely out-of-box with Zapier" , creating a significant integration barrier.
+ * Make.com (formerly Integromat): Make.com is a more visual and powerful platform for complex workflows. While it does not have a native Plaid module, it can be connected using its "HTTP" module. To get the required features (like scheduled scenarios and API access), the "Core" plan is necessary, which starts at $9/mo (billed annually). This is a more cost-effective alternative to Zapier.
+ * Pipedream: Pipedream is an automation platform built specifically for developers. It natively supports writing Node.js or Python code directly within workflows.
+   * Capability: Pipedream has pre-built, source-available triggers and actions for Plaid, including a "Sync Updates Available (Instant)" trigger. It also has triggers for PolygonScan. This solves the Plaid auth problem identified with Zapier.
+   * Pricing: Pipedream offers a "generous free tier".
+ * The Developer Free Tier vs. The No-Code Paid Tier: There is a crucial distinction between Zapier's business model and Pipedream's.
+   * Zapier's model is to make simple, 1-to-1 connections free, but to charge for "pro" features like multi-step logic, custom code, and API calls.
+   * Pipedream's model is developer-centric. It gives away the technical features (code steps, multiple steps, API calls) on its free tier  because it assumes its user is technical. It charges for scale (compute time and credits).
+   * The non-profit's workflow (one webhook, one hash calculation, two API calls per transaction) is computationally trivial. It will easily fit within Pipedream's generous free tier.
+   * This means Pipedream provides the exact functionality required for $0/mo, while Zapier would charge $20-$30/mo for the same thing.
+3.3 Table 2: Automation Middleware: Cost & Feature Comparison (2025)
+| Provider | Free Tier Capabilities | Multi-Step Workflows? (on Free Tier) | Custom API/Code? (on Free Tier) | Native Plaid Integration? | Est. Cost for This Project |
+|---|---|---|---|---|---|
+| Zapier | 100 tasks/mo  | No (2-step max ) | No (Premium feature ) | Yes (Auth issues reported ) | $20-$30/mo (Pro Plan ) |
+| Make.com | 1,000 credits/mo  | Yes | No (Paid feature ) | No (Requires HTTP module ) | $9/mo (Core Plan ) |
+| Pipedream | Generous free tier  | Yes | Yes (Core feature ) | Yes (Native trigger ) | $0/mo (Free Tier ) |
+3.4 Recommendation for Component 2
+The recommendation for this component is Pipedream. It is the objectively superior choice. Its developer-centric model aligns perfectly with the user's technical background, its free tier includes all necessary features (multi-step, code, API calls), and its pre-built Plaid integration  solves the authentication problems that plague other platforms.
+4.0 Component 3: The Immutable Notary (Anchoring Data to the Ledger)
+4.1 Core Concept: Hashing (The Crypto Step)
+This component executes the "crypto" part of the request. It is critical to understand that the full transaction data (e.g., {'vendor': 'Office Depot', 'amount': 120.45}) must never be stored on the public blockchain. Doing so would be "cost prohibitive"  and a severe privacy and security violation.
+The correct process, which will be executed by the Pipedream workflow, is:
+ * Receive the JSON transaction data from Plaid.
+ * Generate a cryptographic hash (e.g., SHA-256) of that data. This creates a 32-byte "digital fingerprint".
+ * Store only this hash on the blockchain.
+ * This hash acts as a "blockchain notary". It proves that the original data existed at that exact time and has not been altered, without revealing the data itself.
+4.2 Consideration: Merkle Trees for Cost Aggregation
+If the non-profit has a high volume of daily transactions (e.g., 50-100+), anchoring each one individually could become cumbersome. A more advanced, cost-effective method is to batch them.
+ * Process: The Pipedream workflow could be set to run once per day. It would gather all 100 transaction hashes, build a Merkle tree from them , and then write only the single Merkle root (one 32-byte hash) to the blockchain.
+ * Result: This provides the same cryptographic proof for all 100 transactions for the cost of a single blockchain write.
+ * Recommendation: The non-profit should start by anchoring each transaction hash individually. If the blockchain gas fees (detailed below) exceed a few dollars per month, it can optimize by implementing this daily Merkle tree batch in its Pipedream workflow.
+4.3 Analysis of Anchoring Methods: TaaS vs. BaaS
+There are two SaaS pathways to get this hash onto the blockchain.
+4.3.1 Path A: TaaS (Timestamping-as-a-Service) - The Pure Plug-in
+This is the simplest, most "plug-in" solution. These services manage the entire blockchain interaction (including batching, Merkle trees, and gas fees) via a simple REST API.
+ * OriginStamp: This service offers a simple API to submit hashes for anchoring. It anchors data to leading blockchains like Bitcoin and Ethereum. Critically, OriginStamp offers a free tier of 50 timestamps per month. For a non-profit with low transaction velocity, this may be a complete $0 solution.
+ * Zoho Sign: Zoho offers blockchain-based timestamping using OpenTimestamps (anchoring to Bitcoin). However, this feature is bundled within its "Enterprise" plan for e-signatures  or its API plan , which consumes "Zoho Sign credits". This is overly complex and costly for the user's need.
+ * Acronis Cyber Notary Cloud: This is an enterprise-grade service bundled with a larger cybersecurity suite  and is not a viable low-cost option.
+4.3.2 Path B: BaaS (Blockchain-as-a-Service) - The Developer Path
+This path offers more control and is more scalable. A BaaS provider offers a simple developer API  to interact directly with a blockchain node. This allows the non-profit to construct and send its own transaction containing the 32-byte hash.
+ * Choosing a Ledger (Cost Analysis): The first step is selecting a public blockchain. The cost to store data on Ethereum mainnet is prohibitively expensive (estimated at $76,000/GB). The clear choices are Ethereum Layer 2 (L2) networks or other high-throughput chains.
+   * Polygon (PoS): This is the most mature, cost-effective, and EVM (Ethereum Virtual Machine) compatible L2. Transaction costs are consistently a fraction of a cent. Recent data shows average costs of ~$0.0075 , $0.00666 , with individual transactions as low as $0.00102.
+   * Arbitrum: A leading L2 , Arbitrum offers similarly low fees: ~$0.0088  and as low as $0.00083.
+   * Optimism: Another major L2 with comparable costs.
+   * Solana: An L1 known for high speed. A simple transaction costs only $0.0005. However, Solana is not EVM-compatible, which adds a layer of development complexity not present in the Polygon/Arbitrum ecosystem.
+   * Ledger Recommendation: The Polygon (PoS) network is the best choice. It has extremely low, predictable fees  and is supported by all major BaaS providers.
+ * BaaS Providers for Polygon:
+   * Tatum: Tatum is the ideal BaaS provider for this use case. It offers a Free plan with 100,000 lifetime credits. More importantly, its API abstracts away private key management, which is a major technical hurdle. An endpoint like v3/offchain/polygon/transfer  allows the Pipedream workflow to send a transaction without ever needing to manage a private key or sign a transaction.
+   * Infura: Infura offers a Free plan. However, Infura is a "pure" node provider. It does not manage private keys. To write data using Infura, the transaction must be cryptographically signed before being sent , which is difficult and insecure to manage within a low-code platform.
+   * Alchemy: Alchemy also offers a free tier  but, like Infura, it acts as a node provider  and would require separate, complex key management.
+   * QuickNode: QuickNode uses a credit-based pricing system. Calls to the Polygon network cost 20 credits per call , which is more complex to manage than Tatum's simple free tier.
+4.4 Table 3: Blockchain Anchoring: Ledger & Service Cost Comparison
+Part 1: Ledger Cost-per-Write (for BaaS Path)
+| Ledger | Approx. Cost per Transaction (Write 32-byte Hash) |
+|---|---|
+| Polygon (PoS) | $0.001 - $0.007  |
+| Arbitrum | $0.0008 - $0.008  |
+| Solana | $0.0005  |
+| Ethereum Mainnet | Prohibitive (Est. >$0.50 - $10.00+, based on $76,000/GB ) |
+Part 2: Anchoring Service Cost (Monthly)
+| Service / Path | Free Tier | Est. Cost for 200 Transactions/Month |
+|---|---|---|
+| OriginStamp (TaaS) | 50 timestamps/mo  | Free for first 50; paid plan required after. |
+| Tatum (BaaS) + Polygon | 100,000 lifetime credits  | ~$1.40 (Tatum: $0 + Polygon Gas: 200 * $0.007 ) |
+4.5 Recommendation for Component 3
+ * Path 1 (Easiest): OriginStamp. The non-profit should use the free tier API. If its monthly expenditure transactions exceed 50, it should move to Path 2.
+ * Path 2 (Most Scalable): Tatum (writing to Polygon). This is the superior long-term solution. It is practically free, highly scalable, and Tatum's abstracted API  maintains the "low overhead" requirement.
+5.0 Component 4: The Public Dashboard (Displaying Proof in React)
+5.1 Designing the User-Facing Transparency Module
+This final component involves integrating the proof into the non-profit's existing React application. This dashboard will combine the human-readable, off-chain spending data with the immutable, on-chain cryptographic proof.
+5.2 The Correct Data Architecture (Off-Chain Data, On-Chain Proof)
+A common misconception is that the React app would read the spending data directly from the blockchain. This is incorrect. As established in , this is slow, expensive, and insecure.
+The correct architecture is a "split data" model:
+ * [Component 2: Pipedream] executes its workflow.
+ * It receives tx_data from Plaid (Component 1).
+ * It generates tx_hash = SHA256(tx_data).
+ * It calls Tatum (Component 3) and receives a polygon_tx_id (the hash of the blockchain transaction).
+ * Pipedream then writes all relevant data to a private database (e.g., INSERT INTO nonprofit_spending (tx_data, tx_hash, polygon_tx_id) VALUES (...)).
+ * The React app simply runs a standard query (e.g., SELECT * FROM nonprofit_spending) against this private database to populate its public display. This is fast, cheap, and secure.
+The polygon_tx_id is the "key" that links the private data to the public proof.
+5.3 Implementing Verification in React (Two Methods)
+5.3.1 Method A: The Passive Proof (Easiest)
+This method provides full transparency with the absolute minimum of front-end code.
+ * Implementation: The React app displays the spending data and simply renders a hyperlink to the Polygon public block explorer.
+ * Example Code (JSX):
+   <div>
+  <span>Vendor: {tx_data.vendor}, Amount: ${tx_data.amount}</span>
+  <a href={`https://urldefense.com/v3/__https://polygonscan.com/tx/$*7Bpolygon_tx_id*7D__;JSU!!PyqGXjU!MNND-LbxEaCxqs5WbVTpzsfi3OnR9uiq7QkgEc9WW-2_gtbZfAfopXrbJMZPOINT3LSucy5eAC22svQ$ `} target="_blank">
+    View Proof on Ledger
+  </a>
+</div>
+
+ * User Experience: A public user can click the link , view the transaction on PolygonScan, and see the cryptic hash in the "Input Data" field. They would have to manually copy the spending data, hash it themselves (using an online tool), and confirm the hashes match. This is transparent but not user-friendly.
+5.3.2 Method B: The Active Verification (Recommended)
+This method provides a superior user experience by having the React app perform the verification in the user's browser, displaying a simple "Verified" badge. This is the "magic" of the system.
+ * Implementation (Option 1 - Ethers.js):
+   * Install Ethers.js: npm install ethers.
+   * Connect to Provider: In the React component, connect to a read-only public Polygon RPC node. Free tiers from Infura  or Alchemy  are sufficient for this. No wallet or private key (a "Signer") is needed for read-only calls.
+     import { ethers } from "ethers";
+// Use a public RPC or a free Infura/Alchemy key
+const provider = new ethers.JsonRpcProvider('https://urldefense.com/v3/__https://polygon-rpc.com__;!!PyqGXjU!MNND-LbxEaCxqs5WbVTpzsfi3OnR9uiq7QkgEc9WW-2_gtbZfAfopXrbJMZPOINT3LSucy5eF9ZXJxw$ ');
+
+   * Create Verification Function: Use React hooks to fetch the on-chain data and compare it.
+     const [isVerified, setIsVerified] = useState(false);
+
+useEffect(() => {
+  const verifyTx = async (tx_data, polygon_tx_id) => {
+    try {
+      // 1. Re-calculate hash client-side
+      const clientHash = ethers.sha256(ethers.toUtf8Bytes(JSON.stringify(tx_data)));
+
+      // 2. Fetch on-chain transaction
+      const onChainTx = await provider.getTransaction(polygon_tx_id);
+
+      // 3. Compare client hash to the hash stored in the tx 'data' field
+      // (onChainTx.data will be the '0x' prefixed hash we sent)
+      if (clientHash === onChainTx.data) {
+        setIsVerified(true);
+      }
+    } catch (e) {
+      console.error("Verification failed", e);
+    }
+  };
+  verifyTx(props.tx_data, props.polygon_tx_id);
+}, [props.tx_data, props.polygon_tx_id]);
+
+   * Render: <div>{isVerified? "Verified ✔" : "Pending..."}</div>
+ * Implementation (Option 2 - PolygonScan API - Simpler):
+   Instead of installing and managing the ethers library, the React app can make a simple REST API call to the PolygonScan API.
+   * The app calls the ?module=account&action=txlist&address=... endpoint , which returns a JSON array of transactions.
+   * The app finds the matching transaction and extracts the input field (which contains the hash).
+   * It then performs the same comparison as in Method B. This avoids the ethers.js dependency.
+5.4 Recommendation for Component 4
+Implement Method B ("Active Verification") using the PolygonScan API. This is the simplest approach for a React developer, as it requires only a standard fetch call (which can be made to the PolygonScan API) and a client-side hash function, providing the most compelling and user-friendly "Proof-of-Expenditure" display.
+6.0 Final Implementation Pathways & Cost-Benefit Analysis
+Two primary pathways are recommended, balancing the user's constraints of "low overhead," "plug-in," and "small fee."
+6.1 Recommendation 1: The Pure SaaS Plug-in (Lowest Technical Overhead)
+This stack prioritizes simplicity above all, relying on TaaS to manage all blockchain complexity.
+ * Stack:
+   * Ingest (1): Plaid (PAYG). (Action: Contact sales, cite Scholar Fund  for non-profit rate).
+   * Process (2): Make.com (Core Plan). (Action: Use HTTP module  to catch Plaid webhook and call OriginStamp API).
+   * Anchor (3): OriginStamp (TaaS). (Action: Use Free Tier API ).
+   * Display (4): React App  with OriginStamp's verification API.
+ * Estimated Monthly Cost Analysis:
+   * Plaid: ~$0.30/mo (for 1 account , assuming non-profit rate).
+   * Make.com: $9.00/mo (Core Plan ).
+   * OriginStamp: $0.00/mo (for <50 txns/mo ).
+   * Total: ~$9.30 / month
+6.2 Recommendation 2: The Developer-Centric Stack (Lowest Cost, Max Control)
+This stack is the optimal solution. It leverages the user's technical skills as a React developer to achieve the absolute lowest possible operating cost.
+ * Stack:
+   * Ingest (1): Plaid (PAYG). (Action: Same as Recommendation 1).
+   * Process (2): Pipedream (Free Tier). (Action: Use pre-built Plaid trigger  and a Node.js code step to hash and call Tatum).
+   * Anchor (3): Tatum (BaaS)  + Polygon (PoS) Blockchain. (Action: Use Tatum's Free Tier API  to send hash ).
+   * Display (4): React App  with PolygonScan API. (Action: Use fetch call for Active Verification).
+ * Estimated Monthly Cost Analysis:
+   * Plaid: ~$0.30/mo (for 1 account ).
+   * Pipedream: $0.00/mo (Free Tier ).
+   * Tatum: $0.00/mo (Free Tier ).
+   * Polygon Gas Fees: (Assuming 200 txns/mo * $0.007/txn ) = ~$1.40/mo.
+   * Total: ~$1.70 / month
+6.3 Table 4: Final Architecture: Recommended SaaS Stack & Estimated Monthly Cost
+| Stack | Ingest Service | Process Service | Anchor Service | Technical Overhead | Estimated Monthly Cost |
+|---|---|---|---|---|---|
+| Rec. 1: "Pure SaaS" | Plaid (PAYG)  | Make.com (Core)  | OriginStamp (Free)  | Lowest (No-code) | ~$9.30/mo |
+| Rec. 2: "Developer-Centric" | Plaid (PAYG)  | Pipedream (Free)  | Tatum (Free) + Polygon  | Low (Basic Node.js) | ~$1.70/mo |
+6.4 Final Conclusion & Next Steps
+Recommendation 2, the "Developer-Centric Stack," is the superior solution. It fully aligns with the project's requirements for a "plug-in" architecture, "low overhead," and a "small fee," while leveraging the user's existing technical skills as a developer. This architecture is robust, scalable, and achieves the goal of radical transparency for an exceptionally low cost.
+The implementation can be initiated with the following 5-step "Quick Start" guide:
+ * Component 1: Sign up for a Plaid developer account. Apply for "Pay as you go" Production access. Immediately contact Plaid Sales to discuss non-profit pricing, referencing the Scholar Fund case study.
+ * Component 3: Sign up for a free Tatum account  and a free PolygonScan account  to get API keys.
+ * Component 2: Sign up for a free Pipedream account. Create a new workflow and select the "Plaid - Sync Updates Available" trigger , connecting it to your Plaid account.
+ * Component 2 (Logic): In the Pipedream workflow, add a Node.js code step. This step will:
+   * Call Plaid's /transactions/sync endpoint using the data from the webhook.
+   * Loop through the new transactions.
+   * For each transaction: generate a SHA-256 hash, call the Tatum API to write the hash to Polygon , and send the full transaction data (plus the polygon_tx_id) to a simple database (e.g., via a POST request to a database API).
+ * Component 4: In the React application, fetch the expenditure data from the private database. For each item, implement the "Active Verification" (Method B) logic by using its polygon_tx_id to make a fetch call to the PolygonScan API , re-hashing, and comparing the results to display a "Verified ✔" status.
